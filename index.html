@@ -1,0 +1,738 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🧠 XMind风格 - 日语接龙 (v1.3 Combo特效版)</title>
+    
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="dict.js"></script> 
+
+    <style>
+        /* ==================== 基础样式 (保持 v1.2) ==================== */
+        :root {
+            --bg-color: #f5f5f5;
+            --card-bg: #ffffff;
+            --card-border: #e0e0e0;
+            --text-primary: #333333;
+            --text-secondary: #666666;
+            
+            --color-player: #4a90e2;   /* 蓝 */
+            --color-player-bg: #e3f2fd;
+            --color-ai: #ff9800;       /* 橙 */
+            --color-ai-bg: #fff3e0;
+            --color-system: #5cb85c;   /* 绿 */
+            --color-system-bg: #e8f5e9;
+
+            --accent-yellow: #f1c40f;
+            --accent-red: #e74c3c;
+            --shadow-color: rgba(0,0,0,0.08);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: "Microsoft YaHei", "微软雅黑", sans-serif;
+            background: var(--bg-color);
+            color: var(--text-primary);
+            height: 100vh;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .container {
+            display: flex; flex-direction: column; height: 100vh; padding: 20px; z-index: 1;
+            transition: transform 0.1s; /* 用于震动平滑 */
+        }
+
+        /* 顶部工具栏 */
+        .toolbar {
+            background: var(--card-bg); border: 1px solid var(--card-border);
+            border-radius: 8px; padding: 12px 20px; display: flex;
+            justify-content: space-between; align-items: center;
+            box-shadow: var(--shadow-color); margin-bottom: 15px;
+        }
+
+        .toolbar-left { display: flex; align-items: center; gap: 15px; }
+        .toolbar-right { display: flex; align-items: center; gap: 10px; }
+
+        .logo { 
+            font-size: 1.4em; font-weight: 900; color: var(--color-player); 
+            margin-right: 10px; letter-spacing: 2px;
+        }
+
+        .current-info {
+            display: flex; align-items: center; gap: 8px;
+            background: #f8f9fa; padding: 8px 15px;
+            border-radius: 6px; border: 1px solid var(--card-border);
+        }
+
+        .target-char {
+            font-size: 1.5em; font-weight: bold; color: var(--color-player);
+            min-width: 40px; text-align: center;
+        }
+
+        .mode-switch {
+            display: flex; background: #f0f0f0; border-radius: 6px;
+            overflow: hidden; border: 1px solid var(--card-border);
+        }
+
+        .mode-btn {
+            padding: 8px 20px; border: none; background: transparent;
+            cursor: pointer; font-size: 14px; color: var(--text-secondary);
+            transition: all 0.3s; border-right: 1px solid var(--card-border);
+        }
+        .mode-btn:last-child { border-right: none; }
+        .mode-btn.active { background: var(--color-player); color: white; font-weight: 500; }
+
+        /* 主图形区域 */
+        .graph-container {
+            flex: 1; background: var(--bg-color); border-radius: 8px;
+            overflow: hidden; border: 1px solid var(--card-border);
+            box-shadow: var(--shadow-color); position: relative; margin-bottom: 15px;
+        }
+        #graph { width: 100%; height: 100%; }
+
+        /* 控制面板 */
+        .control-panel {
+            background: var(--card-bg); border: 1px solid var(--card-border);
+            border-radius: 8px; padding: 15px 20px; box-shadow: var(--shadow-color);
+            display: flex; gap: 10px; flex-wrap: wrap;
+        }
+
+        .input-group { flex: 1; min-width: 300px; display: flex; gap: 8px; }
+
+        #word-input {
+            flex: 1; padding: 10px 15px; border: 1px solid var(--card-border);
+            border-radius: 6px; font-size: 15px; outline: none; transition: all 0.3s;
+        }
+        #word-input:focus { border-color: var(--color-player); box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.1); }
+
+        .btn {
+            padding: 10px 20px; border: none; border-radius: 6px; cursor: pointer;
+            font-size: 14px; font-weight: 500; transition: all 0.3s; color: white; white-space: nowrap;
+        }
+        .btn-primary { background: var(--color-player); }
+        .btn-primary:hover { filter: brightness(1.1); transform: translateY(-1px); }
+        .btn-secondary { background: var(--color-system); }
+        .btn-hint { background: var(--accent-yellow); color: #333; } 
+        .btn-hint:hover { filter: brightness(0.9); }
+        .btn-ai { background: var(--color-ai); display: none; }
+        .btn-outline { background: transparent; border: 1px solid var(--color-player); color: var(--color-player); }
+        .btn-outline:hover { background: rgba(74, 144, 226, 0.1); }
+
+        /* 状态提示 */
+        #status {
+            text-align: center; color: var(--accent-red); font-size: 14px;
+            padding: 8px; min-height: 20px; font-weight: 500;
+        }
+
+        /* 统计信息 */
+        .stats { display: flex; justify-content: center; gap: 15px; margin-top: 10px; }
+        .stat-item {
+            background: #f8f9fa; padding: 10px 20px; border-radius: 6px;
+            border: 1px solid var(--card-border); text-align: center; min-width: 80px;
+        }
+        .stat-label { font-size: 11px; color: var(--text-secondary); margin-bottom: 3px; }
+        .stat-value { font-size: 18px; font-weight: bold; color: var(--text-primary); }
+
+        /* ==================== 粒子特效 ==================== */
+        .particle {
+            position: absolute; width: 8px; height: 8px; border-radius: 50%; pointer-events: none; z-index: 999;
+        }
+        @keyframes pop {
+            0% { transform: translate(0, 0) scale(1); opacity: 1; }
+            100% { transform: translate(var(--tx), var(--ty)) scale(0); opacity: 0; }
+        }
+
+        /* ==================== 新增: Combo 特效样式 ==================== */
+        
+        /* 屏幕震动动画 */
+        @keyframes shake-hard {
+            0% { transform: translate(1px, 1px) rotate(0deg); }
+            10% { transform: translate(-1px, -2px) rotate(-1deg); }
+            20% { transform: translate(-3px, 0px) rotate(1deg); }
+            30% { transform: translate(3px, 2px) rotate(0deg); }
+            40% { transform: translate(1px, -1px) rotate(1deg); }
+            50% { transform: translate(-1px, 2px) rotate(-1deg); }
+            60% { transform: translate(-3px, 1px) rotate(0deg); }
+            70% { transform: translate(3px, 1px) rotate(-1deg); }
+            80% { transform: translate(-1px, -1px) rotate(1deg); }
+            90% { transform: translate(1px, 2px) rotate(0deg); }
+            100% { transform: translate(1px, -2px) rotate(-1deg); }
+        }
+        
+        .shake-screen {
+            animation: shake-hard 0.5s;
+            animation-iteration-count: 1;
+        }
+
+        /* Combo 大字提示 */
+        .combo-popup {
+            position: fixed;
+            top: 40%;
+            left: 50%;
+            transform: translate(-50%, -50%) scale(0);
+            font-size: 80px;
+            font-weight: 900;
+            color: var(--accent-yellow);
+            text-shadow: 4px 4px 0px #e67e22, -2px -2px 0px #333;
+            z-index: 2000;
+            pointer-events: none;
+            opacity: 0;
+            font-family: "Arial Black", sans-serif;
+            text-align: center;
+        }
+        
+        .combo-popup span {
+            display: block;
+            font-size: 30px;
+            color: #fff;
+            text-shadow: 2px 2px 0 #333;
+            margin-top: -10px;
+        }
+
+        @keyframes combo-pop {
+            0% { transform: translate(-50%, -50%) scale(0) rotate(-10deg); opacity: 0; }
+            50% { transform: translate(-50%, -50%) scale(1.2) rotate(5deg); opacity: 1; }
+            70% { transform: translate(-50%, -50%) scale(1.0) rotate(0deg); opacity: 1; }
+            100% { transform: translate(-50%, -50%) scale(1.5); opacity: 0; }
+        }
+
+        .animate-combo {
+            animation: combo-pop 0.8s ease-out forwards;
+        }
+
+        /* ==================== D3 节点样式 ==================== */
+        .node { cursor: pointer; }
+        .node-card {
+            fill: var(--card-bg); stroke: var(--card-border); stroke-width: 1.5px;
+            filter: drop-shadow(0 2px 4px var(--shadow-color)); transition: all 0.3s;
+        }
+        .node-card:hover { stroke: var(--color-player); }
+        .node-text { font-size: 13px; fill: var(--text-primary); font-weight: 500; pointer-events: none; }
+        .node-reading { font-size: 11px; fill: var(--text-secondary); pointer-events: none; }
+        
+        .node-player .node-card { stroke: var(--color-player); fill: var(--color-player-bg); }
+        .node-ai .node-card { stroke: var(--color-ai); fill: var(--color-ai-bg); }
+        .node-system .node-card { stroke: var(--color-system); fill: var(--color-system-bg); }
+        
+        .link { fill: none; stroke: var(--line-color); stroke-width: 1.5px; opacity: 0.6; }
+
+        #loading-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(255, 255, 255, 0.95); display: flex; flex-direction: column;
+            justify-content: center; align-items: center; z-index: 1000;
+        }
+        .spinner {
+            width: 40px; height: 40px; border: 4px solid #f3f3f3;
+            border-top: 4px solid var(--color-player); border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+    <div id="loading-overlay">
+        <div class="spinner"></div>
+        <p style="margin-top:10px; color:#666">词库加载中...</p>
+    </div>
+
+    <div class="container" id="main-container">
+        <div class="toolbar">
+            <div class="toolbar-left">
+                <div class="logo">しりとり</div>
+                <div class="current-info">
+                    <span>目标:</span>
+                    <span class="target-char" id="target-char">?</span>
+                </div>
+                <div class="mode-switch">
+                    <button class="mode-btn active" id="mode-single">单人</button>
+                    <button class="mode-btn" id="mode-ai">AI对战</button>
+                </div>
+            </div>
+            <div class="toolbar-right">
+                <button class="btn btn-outline" id="save-btn">💾 保存</button>
+                <button class="btn btn-outline" id="load-btn">📂 读取</button>
+            </div>
+        </div>
+
+        <div class="graph-container" id="graph-wrapper">
+            <div id="graph"></div>
+        </div>
+
+        <div id="status"></div>
+
+        <div class="control-panel">
+            <div class="input-group">
+                <input type="text" id="word-input" placeholder="输入日语单词..." autocomplete="off">
+                <button class="btn btn-primary" id="submit-btn">提交</button>
+                <button class="btn btn-ai" id="ai-turn-btn">AI 回合</button>
+            </div>
+            <div class="input-group" style="flex: 0 auto;">
+                <button class="btn btn-hint" id="hint-btn">💡 提示 (-50分)</button>
+                <button class="btn btn-secondary" id="online-check-btn">🔍 查词</button>
+                <button class="btn btn-outline" id="reset-btn">🔄 重置</button>
+            </div>
+        </div>
+
+        <div class="stats">
+            <div class="stat-item"><div class="stat-label">得分</div><div class="stat-value" id="player-score">0</div></div>
+            <div class="stat-item"><div class="stat-label">AI得分</div><div class="stat-value" id="ai-score">0</div></div>
+            <div class="stat-item"><div class="stat-label">单词数</div><div class="stat-value" id="word-count">0</div></div>
+            <div class="stat-item"><div class="stat-label">连击</div><div class="stat-value" id="combo">0</div></div>
+        </div>
+    </div>
+    
+    <div id="combo-layer"></div>
+
+    <script>
+        // ===== 全局状态 =====
+        const GameState = {
+            graph: { nodes: [], links: [] },
+            currentNode: null,
+            combo: 0,
+            playerScore: 0,
+            aiScore: 0,
+            lastChar: '', 
+            usedWords: new Set(),
+            isAIMode: false,
+        };
+
+        // ===== 1. 词库管理器 =====
+        class VocabLoader {
+            constructor() {
+                this.dictionary = []; 
+                this.readingMap = new Map();
+            }
+
+            async init() {
+                if (typeof window.RAW_DICT_DATA === 'undefined') {
+                    alert("错误：找不到 dict.js 文件！");
+                    return false;
+                }
+                await new Promise(r => setTimeout(r, 50));
+                this.parseData(window.RAW_DICT_DATA);
+                document.getElementById('loading-overlay').style.display = 'none';
+                return true;
+            }
+
+            parseData(rawText) {
+                const lines = rawText.trim().split('\n');
+                let count = 0;
+                this.dictionary = [];
+                this.readingMap.clear();
+
+                lines.forEach(line => {
+                    const parts = line.split('\t');
+                    if (parts.length >= 2) {
+                        const word = parts[0].trim();
+                        const reading = parts[1].trim();
+                        const meaning = parts[2] ? parts[2].trim() : "";
+                        
+                        if (word && reading) {
+                            const entry = { w: word, r: reading, m: meaning };
+                            this.dictionary.push(entry);
+                            
+                            const firstChar = reading.charAt(0);
+                            if (!this.readingMap.has(firstChar)) {
+                                this.readingMap.set(firstChar, []);
+                            }
+                            this.readingMap.get(firstChar).push(entry);
+                            count++;
+                        }
+                    }
+                });
+                console.log(`✅ 加载词库: ${count} 词`);
+            }
+
+            find(wordInput) {
+                let entry = this.dictionary.find(e => e.w === wordInput); 
+                if (!entry) entry = this.dictionary.find(e => e.r === wordInput); 
+                return entry;
+            }
+
+            getCandidates(startChar) {
+                return this.readingMap.get(startChar) || [];
+            }
+            
+            getRandomStartWord() {
+                const safeWords = this.dictionary.filter(e => !e.r.endsWith('ん'));
+                if (safeWords.length === 0) return null;
+                return safeWords[Math.floor(Math.random() * safeWords.length)];
+            }
+        }
+
+        // ===== 2. 图形渲染器 =====
+        class GraphRenderer {
+            constructor(containerId) {
+                this.container = document.getElementById(containerId);
+                this.width = this.container.clientWidth;
+                this.height = this.container.clientHeight;
+                
+                this.zoomBehavior = d3.zoom()
+                    .scaleExtent([0.1, 4])
+                    .on("zoom", (e) => this.svg.select("g").attr("transform", e.transform));
+
+                this.svg = d3.select("#" + containerId).append("svg")
+                    .attr("width", this.width).attr("height", this.height)
+                    .call(this.zoomBehavior);
+                
+                const g = this.svg.append("g");
+                this.linkGroup = g.append("g").attr("class", "links");
+                this.nodeGroup = g.append("g").attr("class", "nodes");
+                
+                this.simulation = d3.forceSimulation()
+                    .force("link", d3.forceLink().id(d => d.id).distance(120).strength(0.5))
+                    .force("charge", d3.forceManyBody().strength(-300))
+                    .force("center", d3.forceCenter(this.width / 2, this.height / 2))
+                    .force("collide", d3.forceCollide().radius(40));
+                
+                window.addEventListener('resize', () => this.resize());
+            }
+
+            resize() {
+                this.width = this.container.clientWidth;
+                this.height = this.container.clientHeight;
+                this.svg.attr("width", this.width).attr("height", this.height);
+                this.simulation.force("center", d3.forceCenter(this.width / 2, this.height / 2));
+                this.simulation.alpha(0.3).restart();
+            }
+
+            focusNode(node) {
+                if (!node) return;
+                const scale = 1; 
+                const x = -node.x * scale + this.width / 2;
+                const y = -node.y * scale + this.height / 2;
+
+                this.svg.transition()
+                    .duration(750)
+                    .call(
+                        this.zoomBehavior.transform, 
+                        d3.zoomIdentity.translate(x, y).scale(scale)
+                    );
+            }
+
+            updateGraph(graph) {
+                let links = this.linkGroup.selectAll(".link").data(graph.links);
+                links.exit().remove();
+                const linkEnter = links.enter().append("line")
+                    .attr("class", "link")
+                    .style("stroke", d => {
+                        if (d.source.owner === 'player') return 'var(--color-player)';
+                        if (d.source.owner === 'ai') return 'var(--color-ai)';
+                        return 'var(--color-system)';
+                    });
+                links = linkEnter.merge(links);
+
+                let nodes = this.nodeGroup.selectAll(".node").data(graph.nodes, d => d.id);
+                nodes.exit().remove();
+                
+                const nodeEnter = nodes.enter().append("g")
+                    .attr("class", d => `node node-${d.owner}`)
+                    .call(d3.drag().on("start", this.dragstarted.bind(this)).on("drag", this.dragged.bind(this)).on("end", this.dragended.bind(this)))
+                    .on("click", (e, d) => updateStatus(`[${d.owner}] ${d.word} (${d.reading}) : ${d.meaning}`));
+
+                nodeEnter.append("rect").attr("class", "node-card")
+                    .attr("rx", 6).attr("ry", 6)
+                    .attr("width", d => Math.max(80, (d.word.length + d.reading.length)*8 + 20))
+                    .attr("height", 50)
+                    .attr("x", d => -(Math.max(80, (d.word.length + d.reading.length)*8 + 20)) / 2)
+                    .attr("y", -25);
+
+                nodeEnter.append("text").attr("class", "node-text").attr("dy", -2).attr("text-anchor", "middle").text(d => d.word);
+                nodeEnter.append("text").attr("class", "node-reading").attr("dy", 15).attr("text-anchor", "middle").text(d => d.reading);
+
+                nodes = nodeEnter.merge(nodes);
+
+                this.simulation.nodes(graph.nodes).on("tick", () => {
+                    links.attr("x1", d => d.source.x).attr("y1", d => d.source.y).attr("x2", d => d.target.x).attr("y2", d => d.target.y);
+                    nodes.attr("transform", d => `translate(${d.x},${d.y})`);
+                });
+                this.simulation.force("link").links(graph.links);
+                this.simulation.alpha(1).restart();
+            }
+
+            dragstarted(event, d) { if (!event.active) this.simulation.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; }
+            dragged(event, d) { d.fx = event.x; d.fy = event.y; }
+            dragended(event, d) { if (!event.active) this.simulation.alphaTarget(0); d.fx = null; d.fy = null; }
+        }
+
+        // ===== 3. 游戏控制器 =====
+        class GameController {
+            constructor() {
+                this.vocabLoader = new VocabLoader();
+                this.renderer = null;
+            }
+
+            async init() {
+                await this.vocabLoader.init();
+                this.renderer = new GraphRenderer('graph');
+                this.startNewGame();
+            }
+
+            startNewGame() {
+                GameState.graph = { nodes: [], links: [] };
+                GameState.usedWords.clear();
+                GameState.playerScore = 0;
+                GameState.aiScore = 0;
+                GameState.combo = 0;
+                GameState.currentNode = null;
+                
+                const startEntry = this.vocabLoader.getRandomStartWord();
+                if (startEntry) {
+                    this.addWord(startEntry.w, startEntry.r, startEntry.m, 'system');
+                } else {
+                    this.addWord('しりとり', 'しりとり', '接龙', 'system');
+                }
+            }
+
+            normalize(word) {
+                if (!word) return "";
+                return word.replace(/[\u30a1-\u30f6]/g, m => String.fromCharCode(m.charCodeAt(0) - 0x60));
+            }
+
+            getLastChar(reading) {
+                let norm = this.normalize(reading);
+                if (norm.endsWith('ん')) {
+                    if (norm.length > 1) norm = norm.substring(0, norm.length - 1);
+                    else return 'し';
+                }
+                let last = norm.slice(-1);
+                if (last === 'ー' && norm.length > 1) last = norm.slice(-2, -1);
+                const smallMap = {'ぁ':'あ','ぃ':'い','ぅ':'う','ぇ':'え','ぉ':'お','っ':'つ','ゃ':'や','ゅ':'ゆ','ょ':'よ','ゎ':'わ'};
+                return smallMap[last] || last;
+            }
+
+            validateWord(word, reading) {
+                const normReading = this.normalize(reading);
+                const firstChar = normReading.charAt(0);
+                
+                if (firstChar !== GameState.lastChar) return { valid: false, reason: `需以 "${GameState.lastChar}" 开头` };
+                if (GameState.usedWords.has(word)) return { valid: false, reason: "该词已使用" };
+                
+                const entry = this.vocabLoader.find(word);
+                if (!entry) return { valid: false, reason: "词库中无此词 (可点击“查词”确认)" };
+
+                return { valid: true, word: entry };
+            }
+
+            addWord(word, reading, meaning, owner = 'player') {
+                const nodeId = `node_${Date.now()}`;
+                
+                let startX = this.renderer.width / 2;
+                let startY = this.renderer.height / 2;
+                if (GameState.currentNode) {
+                    startX = GameState.currentNode.x;
+                    startY = GameState.currentNode.y;
+                }
+
+                const newNode = {
+                    id: nodeId, word, reading, meaning, owner,
+                    x: startX + (Math.random()-0.5)*50, 
+                    y: startY + (Math.random()-0.5)*50
+                };
+                
+                GameState.graph.nodes.push(newNode);
+                if (GameState.currentNode) {
+                    GameState.graph.links.push({ source: GameState.currentNode.id, target: nodeId });
+                }
+                
+                GameState.currentNode = newNode;
+                GameState.usedWords.add(word);
+                GameState.combo++;
+                
+                const points = word.length * 10 + GameState.combo * 5;
+                if (owner === 'player') GameState.playerScore += points;
+                else if (owner === 'ai') GameState.aiScore += points;
+                
+                GameState.lastChar = this.getLastChar(reading);
+                
+                this.updateUI();
+                this.renderer.updateGraph(GameState.graph);
+                
+                setTimeout(() => {
+                    this.renderer.focusNode(newNode);
+                }, 100);
+                
+                updateStatus(`✓ ${owner}: ${word} (+${points})`);
+
+                if (owner !== 'system') {
+                    this.spawnParticles(startX, startY);
+                    
+                    // ==================== 新增: Combo 判定 ====================
+                    // 只有 >= 5 且是玩家操作（或者是AI也想要效果）触发
+                    // 这里设定所有 >=5 的连击都触发，增加爽感
+                    if (GameState.combo >= 5) {
+                        this.triggerComboEffect(GameState.combo);
+                    }
+                }
+
+                if (GameState.isAIMode && owner === 'player') {
+                    setTimeout(() => this.aiTurn(), 1000);
+                }
+            }
+
+            // ==================== 新增: Combo 特效逻辑 ====================
+            triggerComboEffect(comboCount) {
+                // 1. 屏幕震动
+                const container = document.getElementById('main-container');
+                container.classList.remove('shake-screen'); // 重置动画
+                void container.offsetWidth; // 触发重绘
+                container.classList.add('shake-screen');
+
+                // 2. 弹出 Combo 大字
+                const layer = document.getElementById('combo-layer');
+                const div = document.createElement('div');
+                div.className = 'combo-popup animate-combo';
+                div.innerHTML = `COMBO x${comboCount}<span>Excellent!</span>`;
+                
+                layer.innerHTML = ''; // 清除旧的
+                layer.appendChild(div);
+
+                // 动画结束后移除 DOM
+                setTimeout(() => {
+                    div.remove();
+                }, 1000);
+            }
+
+            useHint() {
+                const cands = this.vocabLoader.getCandidates(GameState.lastChar);
+                const available = cands.filter(w => !GameState.usedWords.has(w.w));
+                
+                if (available.length === 0) {
+                    alert("提示: 词库里好像没有能接的词了...");
+                    return;
+                }
+                
+                const hintWord = available[Math.floor(Math.random() * available.length)];
+                GameState.playerScore -= 50; 
+                this.updateUI();
+                alert(`💡 提示 (-50分):\n单词: ${hintWord.w}\n读音: ${hintWord.r}\n意思: ${hintWord.m}`);
+            }
+
+            aiTurn() {
+                updateStatus('🤖 AI思考中...');
+                
+                const cands = this.vocabLoader.getCandidates(GameState.lastChar);
+                const available = cands.filter(w => !GameState.usedWords.has(w.w));
+                
+                if (available.length === 0) {
+                    alert("🎉 AI认输！你赢了！");
+                    return;
+                }
+                
+                const pick = available[Math.floor(Math.random() * available.length)];
+                this.addWord(pick.w, pick.r, pick.m, 'ai');
+            }
+
+            spawnParticles(x, y) {
+                const container = document.getElementById('graph-wrapper');
+                const pCenter = document.createElement('div');
+                pCenter.style.position = 'absolute';
+                pCenter.style.left = '50%';
+                pCenter.style.top = '50%';
+                container.appendChild(pCenter);
+
+                for(let i=0; i<20; i++) {
+                    const p = document.createElement('div');
+                    p.className = 'particle';
+                    p.style.backgroundColor = ['#e74c3c', '#f1c40f', '#2ecc71', '#3498db', '#9b59b6'][Math.floor(Math.random()*5)];
+                    
+                    const angle = Math.random() * Math.PI * 2;
+                    const velocity = 50 + Math.random() * 100;
+                    const tx = Math.cos(angle) * velocity;
+                    const ty = Math.sin(angle) * velocity;
+                    
+                    p.style.setProperty('--tx', `${tx}px`);
+                    p.style.setProperty('--ty', `${ty}px`);
+                    p.style.animation = `pop 0.6s ease-out forwards`;
+                    
+                    pCenter.appendChild(p);
+                    setTimeout(() => pCenter.remove(), 600);
+                }
+            }
+
+            updateUI() {
+                const set = (id, v) => { const el = document.getElementById(id); if(el) el.textContent = v; };
+                set('target-char', GameState.lastChar);
+                set('player-score', GameState.playerScore);
+                set('ai-score', GameState.aiScore);
+                set('word-count', GameState.graph.nodes.length);
+                set('combo', GameState.combo);
+            }
+
+            toggleAIMode() {
+                GameState.isAIMode = !GameState.isAIMode;
+                const btn = document.getElementById('ai-turn-btn');
+                if(btn) btn.style.display = GameState.isAIMode ? 'inline-block' : 'none';
+                
+                document.getElementById('mode-single').classList.toggle('active');
+                document.getElementById('mode-ai').classList.toggle('active');
+                updateStatus(GameState.isAIMode ? '🤖 AI模式开启' : '🎮 单人模式');
+            }
+
+            saveGame() { alert("存档功能暂只支持 v1.0 结构，建议升级后重开新局"); }
+            loadGame() { alert("请重新开始一局"); }
+            resetGame() { if(confirm("重新开始？")) location.reload(); }
+            
+            onlineCheck() {
+                const val = document.getElementById('word-input').value.trim();
+                if(!val) {
+                    alert("请先在输入框输入要查询的单词");
+                    return;
+                }
+                const url = `https://www.weblio.jp/content/${encodeURIComponent(val)}`;
+                window.open(url, '_blank');
+            }
+        }
+
+        function updateStatus(msg) {
+            const el = document.getElementById('status');
+            if(el) { el.textContent = msg; setTimeout(() => { if(el.textContent===msg) el.textContent=''; }, 3000); }
+        }
+
+        const gameController = new GameController();
+        document.addEventListener('DOMContentLoaded', async () => {
+            await gameController.init();
+            
+            const click = (id, fn) => { const el=document.getElementById(id); if(el) el.onclick=fn; };
+            
+            click('submit-btn', () => {
+                const input = document.getElementById('word-input');
+                const val = input.value.trim();
+                if(!val) return;
+                
+                let entry = gameController.vocabLoader.find(val);
+                let reading = val;
+                
+                if (entry) reading = entry.r;
+                else if (/^[ぁ-んァ-ンー]+$/.test(val)) reading = val; 
+                else { 
+                    updateStatus("❌ 词库无此词 (请点查词确认)"); 
+                    return; 
+                }
+
+                const res = gameController.validateWord(entry ? entry.w : val, reading);
+                if(res.valid) {
+                    gameController.addWord(res.word.w, res.word.r, res.word.m, 'player');
+                    input.value = '';
+                } else {
+                    updateStatus(`⚠️ ${res.reason}`);
+                }
+            });
+
+            document.getElementById('word-input').addEventListener('keypress', (e) => {
+                if(e.key==='Enter') document.getElementById('submit-btn').click();
+            });
+
+            click('mode-single', () => { if(GameState.isAIMode) gameController.toggleAIMode(); });
+            click('mode-ai', () => { if(!GameState.isAIMode) gameController.toggleAIMode(); });
+            click('ai-turn-btn', () => gameController.aiTurn());
+            click('hint-btn', () => gameController.useHint()); 
+            click('reset-btn', () => gameController.resetGame());
+            click('online-check-btn', () => gameController.onlineCheck());
+        });
+    </script>
+</body>
+</html>
