@@ -270,6 +270,7 @@
                     <button class="mode-btn" id="mode-ai">AI对战</button>
                 </div>
                 <button class="rule-pill active" id="beginner-rule-btn">新手友好规则 ON</button>
+                <button class="rule-pill active" id="allow-unknown-btn">未收录词通行 ON</button>
             </div>
             <div class="toolbar-right">
                 <button class="btn btn-outline" id="save-btn">💾 保存</button>
@@ -319,6 +320,10 @@
             isAIMode: false,
             beginnerMode: true,
             blockedChars: new Set(['う', 'る']),
+            allowUnknownKana: true,
+            unknownWordPenaltyRate: 0.5,
+            onlineLookupEnabled: true,
+            onlineLookupEndpoint: '/api/dict/lookup',
         };
 
         // ===== 1. 词库管理器 =====
@@ -326,6 +331,7 @@
             constructor() {
                 this.dictionary = []; 
                 this.readingMap = new Map();
+                this.customWordsKey = 'shiritori_custom_words_v1';
             }
 
             async init() {
@@ -335,6 +341,7 @@
                 }
                 await new Promise(r => setTimeout(r, 50));
                 this.parseData(window.RAW_DICT_DATA);
+                this.loadCustomWords();
                 document.getElementById('loading-overlay').style.display = 'none';
                 return true;
             }
@@ -366,6 +373,34 @@
                     }
                 });
                 console.log(`✅ 加载词库: ${count} 词`);
+            }
+
+            addEntry(entry, persist = false) {
+                if (!entry || !entry.w || !entry.r) return false;
+                if (this.find(entry.w) || this.find(entry.r)) return false;
+
+                this.dictionary.push(entry);
+                const firstChar = entry.r.charAt(0);
+                if (!this.readingMap.has(firstChar)) this.readingMap.set(firstChar, []);
+                this.readingMap.get(firstChar).push(entry);
+
+                if (persist) this.persistCustomWords();
+                return true;
+            }
+
+            persistCustomWords() {
+                const customWords = this.dictionary.filter(e => e.source === 'online');
+                localStorage.setItem(this.customWordsKey, JSON.stringify(customWords));
+            }
+
+            loadCustomWords() {
+                const raw = localStorage.getItem(this.customWordsKey);
+                if (!raw) return;
+                const list = JSON.parse(raw);
+                if (!Array.isArray(list)) return;
+                list.forEach(item => {
+                    this.addEntry({ w: item.w, r: item.r, m: item.m || '', source: 'online' }, false);
+                });
             }
 
             find(wordInput) {
@@ -542,6 +577,42 @@
                 return GameState.blockedChars.has(nextChar);
             }
 
+            isKanaOnly(word) {
+                return /^[ぁ-んァ-ンー]+$/.test(word);
+            }
+
+            getAvailableCandidates(startChar) {
+                const cands = this.vocabLoader.getCandidates(startChar);
+                return cands.filter(w => !GameState.usedWords.has(w.w) && !this.isBlockedLastChar(w.r));
+            }
+
+            async fetchOnlineEntry(wordInput) {
+                if (!GameState.onlineLookupEnabled) return null;
+                const url = `${GameState.onlineLookupEndpoint}?word=${encodeURIComponent(wordInput)}`;
+
+                try {
+                    const response = await fetch(url, { headers: { 'Accept': 'application/json' } });
+                    if (!response.ok) return null;
+
+                    const data = await response.json();
+                    if (!data || !data.exists || !data.reading) return null;
+
+                    const entry = {
+                        w: (data.word || wordInput).trim(),
+                        r: data.reading.trim(),
+                        m: (data.meaning || '在线词典补全').trim(),
+                        source: 'online'
+                    };
+
+                    if (!this.isKanaOnly(entry.r)) return null;
+                    this.vocabLoader.addEntry(entry, true);
+                    return this.vocabLoader.find(entry.w) || this.vocabLoader.find(entry.r);
+                } catch (err) {
+                    console.warn('online lookup unavailable', err);
+                    return null;
+                }
+            }
+
             validateWord(word, reading) {
                 const normReading = this.normalize(reading);
                 const firstChar = normReading.charAt(0);
@@ -550,7 +621,13 @@
                 if (GameState.usedWords.has(word)) return { valid: false, reason: "该词已使用" };
                 
                 const entry = this.vocabLoader.find(word);
-                if (!entry) return { valid: false, reason: "词库中无此词 (可点击“查词”确认)" };
+                if (!entry) {
+                    if (GameState.allowUnknownKana && this.isKanaOnly(word)) {
+                        if (this.isBlockedLastChar(reading)) return { valid: false, reason: "新手规则：该词会把下一个目标变成高难假名（う/る）" };
+                        return { valid: true, word: { w: word, r: reading, m: '（词库未收录：按读音通过）', isUnknown: true } };
+                    }
+                    return { valid: false, reason: "词库未收录。可用纯假名输入，或开启“未收录词通行”。" };
+                }
                 if (this.isBlockedLastChar(entry.r)) return { valid: false, reason: "新手规则：该词会把下一个目标变成高难假名（う/る）" };
 
                 return { valid: true, word: entry };
@@ -581,7 +658,8 @@
                 GameState.usedWords.add(word);
                 GameState.combo++;
                 
-                const points = word.length * 10 + GameState.combo * 5;
+                const basePoints = word.length * 10 + GameState.combo * 5;
+                const points = meaning.includes('词库未收录') ? Math.max(5, Math.floor(basePoints * GameState.unknownWordPenaltyRate)) : basePoints;
                 if (owner === 'player') GameState.playerScore += points;
                 else if (owner === 'ai') GameState.aiScore += points;
                 
@@ -636,8 +714,7 @@
             }
 
             useHint() {
-                const cands = this.vocabLoader.getCandidates(GameState.lastChar);
-                const available = cands.filter(w => !GameState.usedWords.has(w.w) && !this.isBlockedLastChar(w.r));
+                const available = this.getAvailableCandidates(GameState.lastChar);
                 
                 if (available.length === 0) {
                     alert("提示: 词库里好像没有能接的词了...");
@@ -653,11 +730,10 @@
             aiTurn() {
                 updateStatus('🤖 AI思考中...');
                 
-                const cands = this.vocabLoader.getCandidates(GameState.lastChar);
-                const available = cands.filter(w => !GameState.usedWords.has(w.w) && !this.isBlockedLastChar(w.r));
+                const available = this.getAvailableCandidates(GameState.lastChar);
                 
                 if (available.length === 0) {
-                    alert("🎉 AI认输！你赢了！");
+                    updateStatus('🤝 词库断档，AI本回合跳过。你可输入未收录的假名单词继续。');
                     return;
                 }
                 
@@ -719,6 +795,14 @@
                 updateStatus(GameState.beginnerMode ? '📘 新手友好规则已开启（屏蔽 う/る 开头链）' : '🧪 已关闭新手规则，可挑战完整词库');
             }
 
+            toggleUnknownWordMode() {
+                GameState.allowUnknownKana = !GameState.allowUnknownKana;
+                const btn = document.getElementById('allow-unknown-btn');
+                btn.classList.toggle('active', GameState.allowUnknownKana);
+                btn.textContent = `未收录词通行 ${GameState.allowUnknownKana ? 'ON' : 'OFF'}`;
+                updateStatus(GameState.allowUnknownKana ? '🧩 已开启未收录词通行（纯假名可过，半分）' : '🔒 已关闭未收录词通行（仅允许词库内词）');
+            }
+
             saveGame() { alert("存档功能暂只支持 v1.0 结构，建议升级后重开新局"); }
             loadGame() { alert("请重新开始一局"); }
             resetGame() { if(confirm("重新开始？")) location.reload(); }
@@ -746,19 +830,24 @@
             
             const click = (id, fn) => { const el=document.getElementById(id); if(el) el.onclick=fn; };
             
-            click('submit-btn', () => {
+            click('submit-btn', async () => {
                 const input = document.getElementById('word-input');
                 const val = input.value.trim();
                 if(!val) return;
-                
+
                 let entry = gameController.vocabLoader.find(val);
+                if (!entry && GameState.onlineLookupEnabled) {
+                    updateStatus('🌐 本地未收录，正在在线查词...');
+                    entry = await gameController.fetchOnlineEntry(val);
+                    if (entry) updateStatus(`✅ 在线补全成功：${entry.w} (${entry.r})`);
+                }
+
                 let reading = val;
-                
                 if (entry) reading = entry.r;
-                else if (/^[ぁ-んァ-ンー]+$/.test(val)) reading = val; 
-                else { 
-                    updateStatus("❌ 词库无此词 (请点查词确认)"); 
-                    return; 
+                else if (/^[ぁ-んァ-ンー]+$/.test(val)) reading = val;
+                else {
+                    updateStatus("❌ 词库未收录且在线未查到，请改用假名输入或点查词。");
+                    return;
                 }
 
                 const res = gameController.validateWord(entry ? entry.w : val, reading);
@@ -781,6 +870,7 @@
             click('reset-btn', () => gameController.resetGame());
             click('online-check-btn', () => gameController.onlineCheck());
             click('beginner-rule-btn', () => gameController.toggleBeginnerMode());
+            click('allow-unknown-btn', () => gameController.toggleUnknownWordMode());
         });
     </script>
 </body>
