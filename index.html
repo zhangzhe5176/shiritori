@@ -349,30 +349,101 @@
             parseData(rawText) {
                 const lines = rawText.trim().split('\n');
                 let count = 0;
+                let skipped = 0;
                 this.dictionary = [];
                 this.readingMap.clear();
 
                 lines.forEach(line => {
                     const parts = line.split('\t');
-                    if (parts.length >= 2) {
-                        const word = parts[0].trim();
-                        const reading = parts[1].trim();
-                        const meaning = parts[2] ? parts[2].trim() : "";
-                        
-                        if (word && reading) {
-                            const entry = { w: word, r: reading, m: meaning };
-                            this.dictionary.push(entry);
-                            
-                            const firstChar = reading.charAt(0);
-                            if (!this.readingMap.has(firstChar)) {
-                                this.readingMap.set(firstChar, []);
-                            }
-                            this.readingMap.get(firstChar).push(entry);
-                            count++;
-                        }
+                    if (parts.length < 2) return;
+
+                    const rawWord = parts[0].trim();
+                    const rawReading = parts[1].trim();
+                    const rawMeaning = parts[2] ? parts[2].trim() : "";
+
+                    const word = this.cleanWord(rawWord);
+                    let reading = this.extractKana(rawReading);
+                    if (!reading) {
+                        const bracket = rawWord.match(/\[([^\]]+)\]/);
+                        if (bracket) reading = this.extractKana(bracket[1]);
                     }
+                    if (!reading) reading = this.extractKana(word);
+
+                    const meaning = this.toChineseMeaning(rawMeaning);
+                    if (!word || !reading || !this.isKana(reading)) {
+                        skipped++;
+                        return;
+                    }
+
+                    const added = this.addEntry({ w: word, r: this.normalizeKana(reading), m: meaning }, false);
+                    if (added) count++;
                 });
-                console.log(`✅ 加载词库: ${count} 词`);
+                console.log(`✅ 加载词库: ${count} 词，过滤异常词条: ${skipped}`);
+            }
+
+            normalizeKana(text = "") {
+                return text.replace(/[ァ-ヶ]/g, m => String.fromCharCode(m.charCodeAt(0) - 0x60));
+            }
+
+            isKana(text = "") {
+                return /^[ぁ-んー〜]+$/.test(this.normalizeKana(text));
+            }
+
+            extractKana(text = "") {
+                const hit = text.match(/[ぁ-んァ-ンー〜]+/g);
+                if (!hit || hit.length === 0) return "";
+                return this.normalizeKana(hit.join(''));
+            }
+
+            cleanWord(text = "") {
+                return text.replace(/\[[^\]]+\]/g, '').trim();
+            }
+
+            toChineseMeaning(text = "") {
+                if (!text) return "";
+                const parts = text.split(/[;；]/).map(t => t.trim()).filter(Boolean);
+                const zh = parts.filter(t => /[一-鿿]/.test(t));
+                return (zh.length > 0 ? zh : parts).join('；');
+            }
+
+            addEntry(entry, persist = false) {
+                if (!entry || !entry.w || !entry.r) return false;
+                const normalized = {
+                    ...entry,
+                    w: this.cleanWord(entry.w),
+                    r: this.normalizeKana(entry.r),
+                    m: this.toChineseMeaning(entry.m || "")
+                };
+                if (!this.isKana(normalized.r)) return false;
+                if (this.dictionary.some(e => e.w === normalized.w && e.r === normalized.r)) return false;
+
+                this.dictionary.push(normalized);
+                const firstChar = normalized.r.charAt(0);
+                if (!this.readingMap.has(firstChar)) this.readingMap.set(firstChar, []);
+                this.readingMap.get(firstChar).push(normalized);
+
+                if (persist) this.persistCustomWords();
+                return true;
+            }
+
+            persistCustomWords() {
+                const customWords = this.dictionary.filter(e => e.source === 'online');
+                localStorage.setItem(this.customWordsKey, JSON.stringify(customWords));
+            }
+
+            loadCustomWords() {
+                const raw = localStorage.getItem(this.customWordsKey);
+                if (!raw) return;
+                try {
+                    const list = JSON.parse(raw);
+                    if (!Array.isArray(list)) return;
+                    list.forEach(item => {
+                        this.addEntry({ w: item.w, r: item.r, m: item.m || '', source: 'online' }, false);
+                    });
+                } catch (err) {
+                    console.warn('custom words cache broken, reset cache', err);
+                    localStorage.removeItem(this.customWordsKey);
+                }
             }
 
             addEntry(entry, persist = false) {
