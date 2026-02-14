@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🧠 XMind风格 - 日语接龙 (v1.3 Combo特效版)</title>
+    <title>しりとり · 新手友好版</title>
     
     <script src="https://d3js.org/d3.v7.min.js"></script>
     <script src="dict.js"></script> 
@@ -11,11 +11,12 @@
     <style>
         /* ==================== 基础样式 (保持 v1.2) ==================== */
         :root {
-            --bg-color: #f5f5f5;
-            --card-bg: #ffffff;
-            --card-border: #e0e0e0;
-            --text-primary: #333333;
-            --text-secondary: #666666;
+            --bg-color: #eef3ff;
+            --bg-gradient: radial-gradient(circle at top left, #f5f7ff 0%, #eaf0ff 45%, #f8f0ff 100%);
+            --card-bg: rgba(255, 255, 255, 0.88);
+            --card-border: #d8e3ff;
+            --text-primary: #1f2a44;
+            --text-secondary: #5f6b87;
             
             --color-player: #4a90e2;   /* 蓝 */
             --color-player-bg: #e3f2fd;
@@ -26,14 +27,14 @@
 
             --accent-yellow: #f1c40f;
             --accent-red: #e74c3c;
-            --shadow-color: rgba(0,0,0,0.08);
+            --shadow-color: rgba(20, 46, 114, 0.14);
         }
 
         * { margin: 0; padding: 0; box-sizing: border-box; }
 
         body {
-            font-family: "Microsoft YaHei", "微软雅黑", sans-serif;
-            background: var(--bg-color);
+            font-family: "Inter", "Microsoft YaHei", "微软雅黑", sans-serif;
+            background: var(--bg-gradient);
             color: var(--text-primary);
             height: 100vh;
             overflow: hidden;
@@ -48,23 +49,24 @@
         /* 顶部工具栏 */
         .toolbar {
             background: var(--card-bg); border: 1px solid var(--card-border);
-            border-radius: 8px; padding: 12px 20px; display: flex;
+            border-radius: 14px; padding: 14px 22px; display: flex;
             justify-content: space-between; align-items: center;
-            box-shadow: var(--shadow-color); margin-bottom: 15px;
+            box-shadow: 0 16px 30px -24px var(--shadow-color); margin-bottom: 15px;
+            backdrop-filter: blur(8px);
         }
 
         .toolbar-left { display: flex; align-items: center; gap: 15px; }
         .toolbar-right { display: flex; align-items: center; gap: 10px; }
 
         .logo { 
-            font-size: 1.4em; font-weight: 900; color: var(--color-player); 
+            font-size: 1.35em; font-weight: 900; color: var(--color-player); 
             margin-right: 10px; letter-spacing: 2px;
         }
 
         .current-info {
             display: flex; align-items: center; gap: 8px;
-            background: #f8f9fa; padding: 8px 15px;
-            border-radius: 6px; border: 1px solid var(--card-border);
+            background: #f7f9ff; padding: 8px 15px;
+            border-radius: 10px; border: 1px solid var(--card-border);
         }
 
         .target-char {
@@ -73,53 +75,70 @@
         }
 
         .mode-switch {
-            display: flex; background: #f0f0f0; border-radius: 6px;
+            display: flex; background: #eef2ff; border-radius: 10px;
             overflow: hidden; border: 1px solid var(--card-border);
         }
 
         .mode-btn {
-            padding: 8px 20px; border: none; background: transparent;
+            padding: 8px 18px; border: none; background: transparent;
             cursor: pointer; font-size: 14px; color: var(--text-secondary);
             transition: all 0.3s; border-right: 1px solid var(--card-border);
         }
         .mode-btn:last-child { border-right: none; }
-        .mode-btn.active { background: var(--color-player); color: white; font-weight: 500; }
+        .mode-btn.active { background: linear-gradient(135deg, #4a90e2, #5965ff); color: white; font-weight: 500; }
+
+        .rule-pill {
+            font-size: 12px;
+            border: 1px solid #b9c8ff;
+            color: #3b4fa8;
+            background: #edf2ff;
+            border-radius: 999px;
+            padding: 6px 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .rule-pill.active {
+            background: linear-gradient(135deg, #5b7cfa, #6d57ff);
+            color: #fff;
+            border-color: transparent;
+        }
 
         /* 主图形区域 */
         .graph-container {
-            flex: 1; background: var(--bg-color); border-radius: 8px;
+            flex: 1; background: rgba(255,255,255,0.58); border-radius: 16px;
             overflow: hidden; border: 1px solid var(--card-border);
-            box-shadow: var(--shadow-color); position: relative; margin-bottom: 15px;
+            box-shadow: 0 16px 30px -24px var(--shadow-color); position: relative; margin-bottom: 15px;
         }
         #graph { width: 100%; height: 100%; }
 
         /* 控制面板 */
         .control-panel {
             background: var(--card-bg); border: 1px solid var(--card-border);
-            border-radius: 8px; padding: 15px 20px; box-shadow: var(--shadow-color);
+            border-radius: 14px; padding: 15px 20px; box-shadow: 0 16px 30px -24px var(--shadow-color);
             display: flex; gap: 10px; flex-wrap: wrap;
+            backdrop-filter: blur(8px);
         }
 
         .input-group { flex: 1; min-width: 300px; display: flex; gap: 8px; }
 
         #word-input {
             flex: 1; padding: 10px 15px; border: 1px solid var(--card-border);
-            border-radius: 6px; font-size: 15px; outline: none; transition: all 0.3s;
+            border-radius: 10px; font-size: 15px; outline: none; transition: all 0.3s;
         }
         #word-input:focus { border-color: var(--color-player); box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.1); }
 
         .btn {
-            padding: 10px 20px; border: none; border-radius: 6px; cursor: pointer;
+            padding: 10px 18px; border: none; border-radius: 10px; cursor: pointer;
             font-size: 14px; font-weight: 500; transition: all 0.3s; color: white; white-space: nowrap;
         }
-        .btn-primary { background: var(--color-player); }
+        .btn-primary { background: linear-gradient(135deg, #4a90e2, #5965ff); }
         .btn-primary:hover { filter: brightness(1.1); transform: translateY(-1px); }
-        .btn-secondary { background: var(--color-system); }
+        .btn-secondary { background: linear-gradient(135deg, #46b98b, #54cf7d); }
         .btn-hint { background: var(--accent-yellow); color: #333; } 
         .btn-hint:hover { filter: brightness(0.9); }
         .btn-ai { background: var(--color-ai); display: none; }
-        .btn-outline { background: transparent; border: 1px solid var(--color-player); color: var(--color-player); }
-        .btn-outline:hover { background: rgba(74, 144, 226, 0.1); }
+        .btn-outline { background: transparent; border: 1px solid #8da8f7; color: #3e60ca; }
+        .btn-outline:hover { background: rgba(74, 144, 226, 0.08); }
 
         /* 状态提示 */
         #status {
@@ -130,7 +149,7 @@
         /* 统计信息 */
         .stats { display: flex; justify-content: center; gap: 15px; margin-top: 10px; }
         .stat-item {
-            background: #f8f9fa; padding: 10px 20px; border-radius: 6px;
+            background: rgba(255,255,255,0.72); padding: 10px 20px; border-radius: 12px;
             border: 1px solid var(--card-border); text-align: center; min-width: 80px;
         }
         .stat-label { font-size: 11px; color: var(--text-secondary); margin-bottom: 3px; }
@@ -250,6 +269,8 @@
                     <button class="mode-btn active" id="mode-single">单人</button>
                     <button class="mode-btn" id="mode-ai">AI对战</button>
                 </div>
+                <button class="rule-pill active" id="beginner-rule-btn">新手友好规则 ON</button>
+                <button class="rule-pill active" id="allow-unknown-btn">未收录词通行 ON</button>
             </div>
             <div class="toolbar-right">
                 <button class="btn btn-outline" id="save-btn">💾 保存</button>
@@ -297,6 +318,12 @@
             lastChar: '', 
             usedWords: new Set(),
             isAIMode: false,
+            beginnerMode: true,
+            blockedChars: new Set(['う', 'る']),
+            allowUnknownKana: true,
+            unknownWordPenaltyRate: 0.5,
+            onlineLookupEnabled: true,
+            onlineLookupEndpoint: '/api/dict/lookup',
         };
 
         // ===== 1. 词库管理器 =====
@@ -304,6 +331,7 @@
             constructor() {
                 this.dictionary = []; 
                 this.readingMap = new Map();
+                this.customWordsKey = 'shiritori_custom_words_v1';
             }
 
             async init() {
@@ -313,6 +341,7 @@
                 }
                 await new Promise(r => setTimeout(r, 50));
                 this.parseData(window.RAW_DICT_DATA);
+                this.loadCustomWords();
                 document.getElementById('loading-overlay').style.display = 'none';
                 return true;
             }
@@ -320,30 +349,101 @@
             parseData(rawText) {
                 const lines = rawText.trim().split('\n');
                 let count = 0;
+                let skipped = 0;
                 this.dictionary = [];
                 this.readingMap.clear();
 
                 lines.forEach(line => {
                     const parts = line.split('\t');
-                    if (parts.length >= 2) {
-                        const word = parts[0].trim();
-                        const reading = parts[1].trim();
-                        const meaning = parts[2] ? parts[2].trim() : "";
-                        
-                        if (word && reading) {
-                            const entry = { w: word, r: reading, m: meaning };
-                            this.dictionary.push(entry);
-                            
-                            const firstChar = reading.charAt(0);
-                            if (!this.readingMap.has(firstChar)) {
-                                this.readingMap.set(firstChar, []);
-                            }
-                            this.readingMap.get(firstChar).push(entry);
-                            count++;
-                        }
+                    if (parts.length < 2) return;
+
+                    const rawWord = parts[0].trim();
+                    const rawReading = parts[1].trim();
+                    const rawMeaning = parts[2] ? parts[2].trim() : "";
+
+                    const word = this.cleanWord(rawWord);
+                    let reading = this.extractKana(rawReading);
+                    if (!reading) {
+                        const bracket = rawWord.match(/\[([^\]]+)\]/);
+                        if (bracket) reading = this.extractKana(bracket[1]);
                     }
+                    if (!reading) reading = this.extractKana(word);
+
+                    const meaning = this.toChineseMeaning(rawMeaning);
+                    if (!word || !reading || !this.isKana(reading)) {
+                        skipped++;
+                        return;
+                    }
+
+                    const added = this.addEntry({ w: word, r: this.normalizeKana(reading), m: meaning }, false);
+                    if (added) count++;
                 });
-                console.log(`✅ 加载词库: ${count} 词`);
+                console.log(`✅ 加载词库: ${count} 词，过滤异常词条: ${skipped}`);
+            }
+
+            normalizeKana(text = "") {
+                return text.replace(/[ァ-ヶ]/g, m => String.fromCharCode(m.charCodeAt(0) - 0x60));
+            }
+
+            isKana(text = "") {
+                return /^[ぁ-んー〜]+$/.test(this.normalizeKana(text));
+            }
+
+            extractKana(text = "") {
+                const hit = text.match(/[ぁ-んァ-ンー〜]+/g);
+                if (!hit || hit.length === 0) return "";
+                return this.normalizeKana(hit.join(''));
+            }
+
+            cleanWord(text = "") {
+                return text.replace(/\[[^\]]+\]/g, '').trim();
+            }
+
+            toChineseMeaning(text = "") {
+                if (!text) return "";
+                const parts = text.split(/[;；]/).map(t => t.trim()).filter(Boolean);
+                const zh = parts.filter(t => /[一-鿿]/.test(t));
+                return (zh.length > 0 ? zh : parts).join('；');
+            }
+
+            addEntry(entry, persist = false) {
+                if (!entry || !entry.w || !entry.r) return false;
+                const normalized = {
+                    ...entry,
+                    w: this.cleanWord(entry.w),
+                    r: this.normalizeKana(entry.r),
+                    m: this.toChineseMeaning(entry.m || "")
+                };
+                if (!this.isKana(normalized.r)) return false;
+                if (this.dictionary.some(e => e.w === normalized.w && e.r === normalized.r)) return false;
+
+                this.dictionary.push(normalized);
+                const firstChar = normalized.r.charAt(0);
+                if (!this.readingMap.has(firstChar)) this.readingMap.set(firstChar, []);
+                this.readingMap.get(firstChar).push(normalized);
+
+                if (persist) this.persistCustomWords();
+                return true;
+            }
+
+            persistCustomWords() {
+                const customWords = this.dictionary.filter(e => e.source === 'online');
+                localStorage.setItem(this.customWordsKey, JSON.stringify(customWords));
+            }
+
+            loadCustomWords() {
+                const raw = localStorage.getItem(this.customWordsKey);
+                if (!raw) return;
+                try {
+                    const list = JSON.parse(raw);
+                    if (!Array.isArray(list)) return;
+                    list.forEach(item => {
+                        this.addEntry({ w: item.w, r: item.r, m: item.m || '', source: 'online' }, false);
+                    });
+                } catch (err) {
+                    console.warn('custom words cache broken, reset cache', err);
+                    localStorage.removeItem(this.customWordsKey);
+                }
             }
 
             find(wordInput) {
@@ -356,8 +456,18 @@
                 return this.readingMap.get(startChar) || [];
             }
             
-            getRandomStartWord() {
-                const safeWords = this.dictionary.filter(e => !e.r.endsWith('ん'));
+            getRandomStartWord(blockedChars = new Set()) {
+                const normalize = (word) => word.replace(/[ァ-ヶ]/g, m => String.fromCharCode(m.charCodeAt(0) - 0x60));
+                const getLastChar = (reading) => {
+                    let norm = normalize(reading);
+                    if (norm.endsWith('ん')) norm = norm.slice(0, -1);
+                    let last = norm.slice(-1);
+                    if (last === 'ー' && norm.length > 1) last = norm.slice(-2, -1);
+                    const smallMap = {'ぁ':'あ','ぃ':'い','ぅ':'う','ぇ':'え','ぉ':'お','っ':'つ','ゃ':'や','ゅ':'ゆ','ょ':'よ','ゎ':'わ'};
+                    return smallMap[last] || last;
+                };
+
+                const safeWords = this.dictionary.filter(e => !e.r.endsWith('ん') && !blockedChars.has(getLastChar(e.r)));
                 if (safeWords.length === 0) return null;
                 return safeWords[Math.floor(Math.random() * safeWords.length)];
             }
@@ -479,7 +589,7 @@
                 GameState.combo = 0;
                 GameState.currentNode = null;
                 
-                const startEntry = this.vocabLoader.getRandomStartWord();
+                const startEntry = this.vocabLoader.getRandomStartWord(GameState.beginnerMode ? GameState.blockedChars : new Set());
                 if (startEntry) {
                     this.addWord(startEntry.w, startEntry.r, startEntry.m, 'system');
                 } else {
@@ -504,6 +614,48 @@
                 return smallMap[last] || last;
             }
 
+            isBlockedLastChar(reading) {
+                if (!GameState.beginnerMode) return false;
+                const nextChar = this.getLastChar(reading);
+                return GameState.blockedChars.has(nextChar);
+            }
+
+            isKanaOnly(word) {
+                return /^[ぁ-んァ-ンー]+$/.test(word);
+            }
+
+            getAvailableCandidates(startChar) {
+                const cands = this.vocabLoader.getCandidates(startChar);
+                return cands.filter(w => !GameState.usedWords.has(w.w) && !this.isBlockedLastChar(w.r));
+            }
+
+            async fetchOnlineEntry(wordInput) {
+                if (!GameState.onlineLookupEnabled) return null;
+                const url = `${GameState.onlineLookupEndpoint}?word=${encodeURIComponent(wordInput)}`;
+
+                try {
+                    const response = await fetch(url, { headers: { 'Accept': 'application/json' } });
+                    if (!response.ok) return null;
+
+                    const data = await response.json();
+                    if (!data || !data.exists || !data.reading) return null;
+
+                    const entry = {
+                        w: (data.word || wordInput).trim(),
+                        r: data.reading.trim(),
+                        m: (data.meaning || '在线词典补全').trim(),
+                        source: 'online'
+                    };
+
+                    if (!this.isKanaOnly(entry.r)) return null;
+                    this.vocabLoader.addEntry(entry, true);
+                    return this.vocabLoader.find(entry.w) || this.vocabLoader.find(entry.r);
+                } catch (err) {
+                    console.warn('online lookup unavailable', err);
+                    return null;
+                }
+            }
+
             validateWord(word, reading) {
                 const normReading = this.normalize(reading);
                 const firstChar = normReading.charAt(0);
@@ -512,7 +664,14 @@
                 if (GameState.usedWords.has(word)) return { valid: false, reason: "该词已使用" };
                 
                 const entry = this.vocabLoader.find(word);
-                if (!entry) return { valid: false, reason: "词库中无此词 (可点击“查词”确认)" };
+                if (!entry) {
+                    if (GameState.allowUnknownKana && this.isKanaOnly(word)) {
+                        if (this.isBlockedLastChar(reading)) return { valid: false, reason: "新手规则：该词会把下一个目标变成高难假名（う/る）" };
+                        return { valid: true, word: { w: word, r: reading, m: '（词库未收录：按读音通过）', isUnknown: true } };
+                    }
+                    return { valid: false, reason: "词库未收录。可用纯假名输入，或开启“未收录词通行”。" };
+                }
+                if (this.isBlockedLastChar(entry.r)) return { valid: false, reason: "新手规则：该词会把下一个目标变成高难假名（う/る）" };
 
                 return { valid: true, word: entry };
             }
@@ -542,7 +701,8 @@
                 GameState.usedWords.add(word);
                 GameState.combo++;
                 
-                const points = word.length * 10 + GameState.combo * 5;
+                const basePoints = word.length * 10 + GameState.combo * 5;
+                const points = meaning.includes('词库未收录') ? Math.max(5, Math.floor(basePoints * GameState.unknownWordPenaltyRate)) : basePoints;
                 if (owner === 'player') GameState.playerScore += points;
                 else if (owner === 'ai') GameState.aiScore += points;
                 
@@ -555,7 +715,7 @@
                     this.renderer.focusNode(newNode);
                 }, 100);
                 
-                updateStatus(`✓ ${owner}: ${word} (+${points})`);
+                updateStatus(`✓ ${owner}: ${word} (+${points})` + (GameState.beginnerMode ? ' · 新手规则生效中' : ''));
 
                 if (owner !== 'system') {
                     this.spawnParticles(startX, startY);
@@ -597,8 +757,7 @@
             }
 
             useHint() {
-                const cands = this.vocabLoader.getCandidates(GameState.lastChar);
-                const available = cands.filter(w => !GameState.usedWords.has(w.w));
+                const available = this.getAvailableCandidates(GameState.lastChar);
                 
                 if (available.length === 0) {
                     alert("提示: 词库里好像没有能接的词了...");
@@ -614,11 +773,10 @@
             aiTurn() {
                 updateStatus('🤖 AI思考中...');
                 
-                const cands = this.vocabLoader.getCandidates(GameState.lastChar);
-                const available = cands.filter(w => !GameState.usedWords.has(w.w));
+                const available = this.getAvailableCandidates(GameState.lastChar);
                 
                 if (available.length === 0) {
-                    alert("🎉 AI认输！你赢了！");
+                    updateStatus('🤝 词库断档，AI本回合跳过。你可输入未收录的假名单词继续。');
                     return;
                 }
                 
@@ -672,6 +830,22 @@
                 updateStatus(GameState.isAIMode ? '🤖 AI模式开启' : '🎮 单人模式');
             }
 
+            toggleBeginnerMode() {
+                GameState.beginnerMode = !GameState.beginnerMode;
+                const btn = document.getElementById('beginner-rule-btn');
+                btn.classList.toggle('active', GameState.beginnerMode);
+                btn.textContent = `新手友好规则 ${GameState.beginnerMode ? 'ON' : 'OFF'}`;
+                updateStatus(GameState.beginnerMode ? '📘 新手友好规则已开启（屏蔽 う/る 开头链）' : '🧪 已关闭新手规则，可挑战完整词库');
+            }
+
+            toggleUnknownWordMode() {
+                GameState.allowUnknownKana = !GameState.allowUnknownKana;
+                const btn = document.getElementById('allow-unknown-btn');
+                btn.classList.toggle('active', GameState.allowUnknownKana);
+                btn.textContent = `未收录词通行 ${GameState.allowUnknownKana ? 'ON' : 'OFF'}`;
+                updateStatus(GameState.allowUnknownKana ? '🧩 已开启未收录词通行（纯假名可过，半分）' : '🔒 已关闭未收录词通行（仅允许词库内词）');
+            }
+
             saveGame() { alert("存档功能暂只支持 v1.0 结构，建议升级后重开新局"); }
             loadGame() { alert("请重新开始一局"); }
             resetGame() { if(confirm("重新开始？")) location.reload(); }
@@ -693,24 +867,30 @@
         }
 
         const gameController = new GameController();
+        window.gameController = gameController;
         document.addEventListener('DOMContentLoaded', async () => {
             await gameController.init();
             
             const click = (id, fn) => { const el=document.getElementById(id); if(el) el.onclick=fn; };
             
-            click('submit-btn', () => {
+            click('submit-btn', async () => {
                 const input = document.getElementById('word-input');
                 const val = input.value.trim();
                 if(!val) return;
-                
+
                 let entry = gameController.vocabLoader.find(val);
+                if (!entry && GameState.onlineLookupEnabled) {
+                    updateStatus('🌐 本地未收录，正在在线查词...');
+                    entry = await gameController.fetchOnlineEntry(val);
+                    if (entry) updateStatus(`✅ 在线补全成功：${entry.w} (${entry.r})`);
+                }
+
                 let reading = val;
-                
                 if (entry) reading = entry.r;
-                else if (/^[ぁ-んァ-ンー]+$/.test(val)) reading = val; 
-                else { 
-                    updateStatus("❌ 词库无此词 (请点查词确认)"); 
-                    return; 
+                else if (/^[ぁ-んァ-ンー]+$/.test(val)) reading = val;
+                else {
+                    updateStatus("❌ 词库未收录且在线未查到，请改用假名输入或点查词。");
+                    return;
                 }
 
                 const res = gameController.validateWord(entry ? entry.w : val, reading);
@@ -732,6 +912,8 @@
             click('hint-btn', () => gameController.useHint()); 
             click('reset-btn', () => gameController.resetGame());
             click('online-check-btn', () => gameController.onlineCheck());
+            click('beginner-rule-btn', () => gameController.toggleBeginnerMode());
+            click('allow-unknown-btn', () => gameController.toggleUnknownWordMode());
         });
     </script>
 </body>
